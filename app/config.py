@@ -43,7 +43,7 @@ class AppConfig:
     env: EnvCfg
 
 def load_config(env_path: str = ".env", config_path: str = "config.yaml") -> AppConfig:
-    raw = yaml.safe_load(Path(config_path).read_text()) or {}
+    raw = yaml.safe_load(Path(config_path).read_text(encoding="utf-8")) or {}
     t = raw.get("targets", {}) or {}
     i = raw.get("ingestion", {}) or {}
     b = raw.get("backfill", {}) or {}

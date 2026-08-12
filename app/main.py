@@ -1,4 +1,4 @@
-import asyncio, logging, os
+import asyncio, logging, os, sys
 from fastapi import FastAPI
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -9,6 +9,14 @@ from app.worker import EventWorker
 from app.media import MediaDownloader, sweep_failed
 from app.backfill import BackfillJob
 from app.receiver import create_app as create_receiver
+
+# Force UTF-8 on the console so logging group/contact names that contain
+# emoji or other non-ASCII characters does not crash on Windows (cp1252).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError):
+        pass
 
 log = logging.getLogger("wa-ingest")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")

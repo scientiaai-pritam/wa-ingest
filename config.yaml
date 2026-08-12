@@ -1,15 +1,15 @@
 targets:
-  groups: ["Project Team"]
+  groups: ["Thora photos dedo 🤳🏻"]
   communities: []
   channels: []
-  contacts: ["+919984351847"]
+  contacts: ["+918799507812"]
 
 ingestion:
   capture_events: ["post", "put", "delete", "status"]
   include_outgoing: true
 
 backfill:
-  interval_seconds: 600
+  interval_seconds: 7200
   per_chat_page_size: 100
   initial_history_pages: 5
 
