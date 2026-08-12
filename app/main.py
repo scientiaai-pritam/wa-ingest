@@ -79,10 +79,11 @@ async def run():
     cfg = load_config()
     client = WhapiClient(cfg.env.whapi_base_url, cfg.env.whapi_token)
     resolver = Resolver(client)
-    allowlist = await resolver.resolve(cfg.targets)
+    allowlist = await resolver.resolve_cached(cfg.targets)
     if resolver.unresolved:
         log.warning("Unresolved targets: %s", resolver.unresolved)
-    log.info("Allowlist (%d): %s", len(allowlist), list(allowlist.keys()))
+    log.info("Allowlist (%d) [%s]: %s", len(allowlist),
+             "cached" if resolver.cache_hit else "resolved via API", list(allowlist.keys()))
     app, _tasks, shutdown = build_application(cfg, allowlist=allowlist)
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8000"))
