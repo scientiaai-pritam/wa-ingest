@@ -1,5 +1,6 @@
-import asyncio, random, time
-from datetime import datetime, timezone
+import asyncio, json, random, time
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from app.store import Store
 from app.whapi_client import WhapiClient
 
@@ -66,3 +67,36 @@ class MediaDownloader:
             ok = await self.process_one()
             if not ok:
                 break
+
+
+async def sweep_failed(store, media_queue, *, lookback_days: int = 2, now=time.time) -> int:
+    now_ts = int(now())
+    cutoff = now_ts - lookback_days * 86400
+    count = 0
+    base = Path(store.msg_dir)
+    if not base.exists():
+        return 0
+    for day_file in base.rglob("*.jsonl"):
+        try:
+            text = day_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for line in text.splitlines():
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if rec.get("kind") != "media":
+                continue
+            media = rec.get("media") or {}
+            if media.get("status") not in ("failed", "retry"):
+                continue
+            chat_id = rec.get("chat_id")
+            ts = rec.get("ts")
+            if not chat_id or ts is None or ts < cutoff:
+                continue
+            await media_queue.put({"message_id": rec["message_id"], "chat_id": chat_id, "ts": ts,
+                                   "link": media.get("link"), "mime": media.get("mime"),
+                                   "attempts": media.get("attempts", 0)})
+            count += 1
+    return count
