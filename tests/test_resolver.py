@@ -13,16 +13,16 @@ class FakeClient:
 async def test_resolve_group_by_name_and_contact_by_phone():
     client = FakeClient(
         groups=[{"id": "g1@g.us", "name": "Project Team"}],
-        chats=[{"id": "g1@g.us", "type": "group", "name": "Project Team"},
-               {"id": "91@s.whatsapp.net", "type": "contact", "name": "Mom"}],
-        contacts=[{"id": "91@s.whatsapp.net", "phone": "+919999999991", "name": "Mom"}],
+        chats=[{"id": "g1@g.us", "type": "group", "name": "Project Team"}],
+        contacts=[],
     )
     r = Resolver(client)
     allow = await r.resolve(Targets(groups=["Project Team"], contacts=["+919999999991"]))
     assert "g1@g.us" in allow
     assert allow["g1@g.us"]["type"] == "group"
-    assert "91@s.whatsapp.net" in allow
-    assert allow["91@s.whatsapp.net"]["type"] == "contact"
+    # contact phone is used directly in BOTH forms, no API resolution for it
+    assert "919999999991" in allow
+    assert "919999999991@s.whatsapp.net" in allow
     assert r.unresolved == []
 
 @pytest.mark.asyncio
@@ -84,4 +84,67 @@ async def test_resolve_cached_invalidates_when_targets_change(tmp_path):
     assert c2.calls == 3
     assert r2.cache_hit is False
     assert "g2@g.us" in allow2
+
+
+class ExplodingClient:
+    async def get_groups(self): raise AssertionError("API should not be called")
+    async def get_chats(self): raise AssertionError("API should not be called")
+    async def get_contacts(self): raise AssertionError("API should not be called")
+
+
+@pytest.mark.asyncio
+async def test_ids_only_skips_api_entirely():
+    # All targets are chat IDs -> zero API calls.
+    r = Resolver(ExplodingClient())
+    allow = await r.resolve(Targets(
+        groups=["120363abc@g.us"],
+        contacts=["919984351847@s.whatsapp.net"],
+        channels=["120363zzz@newsletter"],
+    ))
+    assert set(allow) == {"120363abc@g.us", "120363zzz@newsletter",
+                          "919984351847", "919984351847@s.whatsapp.net"}
+    assert allow["120363abc@g.us"]["type"] == "group"
+    assert allow["919984351847@s.whatsapp.net"]["type"] == "contact"
+    assert allow["919984351847"]["type"] == "contact"
+    assert allow["120363zzz@newsletter"]["type"] == "channel"
+    assert r.unresolved == []
+
+
+@pytest.mark.asyncio
+async def test_mixed_ids_and_names_uses_id_directly_and_resolves_name():
+    client = CountingClient(
+        groups=[{"id": "g_name@g.us", "name": "By Name"}],
+        chats=[{"id": "g_name@g.us", "type": "group", "name": "By Name"}],
+        contacts=[],
+    )
+    r = Resolver(client)
+    allow = await r.resolve(Targets(groups=["g_id@g.us", "By Name"]))
+    # the ID entry is used directly, the name is resolved via API
+    assert "g_id@g.us" in allow and allow["g_id@g.us"]["type"] == "group"
+    assert "g_name@g.us" in allow
+    assert client.calls == 3  # API was needed for the name entry
+
+
+@pytest.mark.asyncio
+async def test_ids_only_cached_zero_calls_on_first_run(tmp_path):
+    cache = tmp_path / "allowlist.json"
+    targets = Targets(groups=["120363abc@g.us"])
+    c = CountingClient(groups=[], chats=[], contacts=[])
+    allow = await Resolver(c).resolve_cached(targets, cache_path=str(cache))
+    assert "120363abc@g.us" in allow
+    assert c.calls == 0  # no API even on first run, and no cache either
+
+
+@pytest.mark.asyncio
+async def test_contact_by_bare_phone_and_by_jid_both_forms():
+    # bare digits (as returned by whapi /contacts) and full JID both work
+    r = Resolver(ExplodingClient())
+    allow = await r.resolve(Targets(contacts=["919468930964", "918799507812@s.whatsapp.net"]))
+    assert allow["919468930964"]["type"] == "contact"
+    assert "919468930964@s.whatsapp.net" in allow
+    assert allow["918799507812@s.whatsapp.net"]["type"] == "contact"
+    assert "918799507812" in allow
+    assert r.unresolved == []
+
+
 

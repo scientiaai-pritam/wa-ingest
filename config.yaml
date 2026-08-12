@@ -1,8 +1,8 @@
 targets:
-  groups: ["Thora photos dedo 🤳🏻"]
+  groups: ["Thora photos dedo 🤳🏻",]
   communities: []
   channels: []
-  contacts: ["+918799507812"]
+  contacts: ["+918799507812","919512843906", J.N.B, Sayanta]
 
 ingestion:
   capture_events: ["post", "put", "delete", "status"]
