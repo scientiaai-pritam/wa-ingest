@@ -1,4 +1,4 @@
-import asyncio, logging
+import asyncio, logging, os
 from fastapi import FastAPI
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -64,8 +64,10 @@ def build_application(config: AppConfig, *, allowlist: dict, data_dir: str = "da
 async def run():
     """Resolve allowlist from config, build the app, serve via uvicorn."""
     import uvicorn
+    from dotenv import load_dotenv
     from app.config import load_config
     from app.resolver import Resolver
+    load_dotenv()  # .env values become os.environ (real env vars still win)
     cfg = load_config()
     client = WhapiClient(cfg.env.whapi_base_url, cfg.env.whapi_token)
     resolver = Resolver(client)
@@ -74,7 +76,9 @@ async def run():
         log.warning("Unresolved targets: %s", resolver.unresolved)
     log.info("Allowlist (%d): %s", len(allowlist), list(allowlist.keys()))
     app, _tasks, shutdown = build_application(cfg, allowlist=allowlist)
-    config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="info")
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8000"))
+    config = uvicorn.Config(app, host=host, port=port, log_level="info")
     server = uvicorn.Server(config)
     try:
         await server.serve()
