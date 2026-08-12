@@ -2,7 +2,7 @@ import asyncio
 from fastapi import FastAPI, Header, Request
 from fastapi.responses import JSONResponse
 
-def create_app(*, webhook_secret: str, allowlist: dict, capture_events: list[str],
+def create_app(*, webhook_secret: str | None, allowlist: dict, capture_events: list[str],
                include_outgoing: bool, event_queue: asyncio.Queue, metrics: dict) -> FastAPI:
     app = FastAPI(title="wa-ingest")
     app.state.event_queue = event_queue
@@ -11,7 +11,8 @@ def create_app(*, webhook_secret: str, allowlist: dict, capture_events: list[str
 
     @app.post("/webhook")
     async def webhook(request: Request, x_webhook_secret: str | None = Header(default=None, alias="X-Webhook-Secret")):
-        if x_webhook_secret != webhook_secret:
+        # Secret is optional: enforced only when WEBHOOK_SECRET is set in .env.
+        if webhook_secret and x_webhook_secret != webhook_secret:
             return JSONResponse(status_code=401, content={"error": "bad secret"})
         body = await request.json()
         event_name = (body.get("event") or {}).get("event")

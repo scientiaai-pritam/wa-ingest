@@ -30,8 +30,8 @@ class MediaCfg:
 @dataclass
 class EnvCfg:
     whapi_token: str
-    webhook_secret: str
     webhook_url: str
+    webhook_secret: str | None = None
     whapi_base_url: str = "https://gate.whapi.cloud"
 
 @dataclass
@@ -49,7 +49,7 @@ def load_config(env_path: str = ".env", config_path: str = "config.yaml") -> App
     b = raw.get("backfill", {}) or {}
     m = raw.get("media", {}) or {}
     env = dotenv_values(env_path)
-    required = ["WHAPI_TOKEN", "WEBHOOK_SECRET", "WEBHOOK_URL"]
+    required = ["WHAPI_TOKEN", "WEBHOOK_URL"]
     missing = [k for k in required if not env.get(k)]
     if missing:
         raise RuntimeError(f"Missing env keys in {env_path}: {missing}")
@@ -74,8 +74,8 @@ def load_config(env_path: str = ".env", config_path: str = "config.yaml") -> App
         ),
         env=EnvCfg(
             whapi_token=env["WHAPI_TOKEN"],
-            webhook_secret=env["WEBHOOK_SECRET"],
             webhook_url=env["WEBHOOK_URL"],
+            webhook_secret=env.get("WEBHOOK_SECRET") or None,
             whapi_base_url=env.get("WHAPI_BASE_URL", "https://gate.whapi.cloud"),
         ),
     )

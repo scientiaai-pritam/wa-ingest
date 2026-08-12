@@ -43,3 +43,16 @@ def test_full_queue_returns_503():
             "messages":[{"id":"m1","chat_id":"g@g.us","timestamp":1}]}
     r = c.post("/webhook", json=body, headers={"X-Webhook-Secret":"sec"})
     assert r.status_code == 503
+
+def test_no_secret_configured_accepts_without_header():
+    # When WEBHOOK_SECRET is not set, auth is disabled and requests with no header are accepted.
+    q = asyncio.Queue(maxsize=10); m = {"received":0,"filtered":0}
+    c = TestClient(create_app(webhook_secret=None, allowlist={"g@g.us": {"type":"group"}},
+                              capture_events=["post"], include_outgoing=True,
+                              event_queue=q, metrics=m))
+    body = {"event":{"event":"post"},
+            "messages":[{"id":"m1","chat_id":"g@g.us","timestamp":1}]}
+    r = c.post("/webhook", json=body)  # no X-Webhook-Secret header
+    assert r.status_code == 200
+    assert m["received"] == 1
+
