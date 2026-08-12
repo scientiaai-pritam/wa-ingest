@@ -14,10 +14,11 @@ ingestion:
   capture_events: ["post", "put", "delete", "status"]
   include_outgoing: true
 
-# backfill:
-#   interval_seconds: 7200
-#   per_chat_page_size: 100
-#   initial_history_pages: 5
+backfill:
+  enabled: false              # set true to enable history catch-up (uses API quota)
+  interval_seconds: 7200
+  per_chat_page_size: 100
+  initial_history_pages: 5
 
 media:
   max_concurrent_downloads: 3

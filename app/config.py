@@ -18,6 +18,7 @@ class IngestionCfg:
 
 @dataclass
 class BackfillCfg:
+    enabled: bool = True
     interval_seconds: int = 600
     per_chat_page_size: int = 100
     initial_history_pages: int = 5
@@ -65,6 +66,7 @@ def load_config(env_path: str = ".env", config_path: str = "config.yaml") -> App
             include_outgoing=i.get("include_outgoing", True),
         ),
         backfill=BackfillCfg(
+            enabled=b.get("enabled", True),
             interval_seconds=b.get("interval_seconds", 600),
             per_chat_page_size=b.get("per_chat_page_size", 100),
             initial_history_pages=b.get("initial_history_pages", 5),

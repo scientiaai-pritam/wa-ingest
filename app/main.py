@@ -50,8 +50,9 @@ def build_application(config: AppConfig, *, allowlist: dict, data_dir: str = "da
     media_task = asyncio.create_task(downloader.run(), name="media-worker")
 
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(backfill.run_once, "interval",
-                      seconds=config.backfill.interval_seconds, id="backfill")
+    if config.backfill.enabled:
+        scheduler.add_job(backfill.run_once, "interval",
+                          seconds=config.backfill.interval_seconds, id="backfill")
     async def sweep_job():
         await sweep_failed(store, media_queue)
     scheduler.add_job(sweep_job, "interval", hours=1, id="media-sweep")
@@ -61,6 +62,7 @@ def build_application(config: AppConfig, *, allowlist: dict, data_dir: str = "da
                           capture_events=config.ingestion.capture_events,
                           include_outgoing=config.ingestion.include_outgoing,
                           event_queue=event_queue, metrics=metrics)
+    app.state.scheduler = scheduler
 
     def shutdown():
         scheduler.shutdown(wait=False)
