@@ -9,6 +9,7 @@ class Targets:
     communities: list[str] = field(default_factory=list)
     channels: list[str] = field(default_factory=list)
     contacts: list[str] = field(default_factory=list)
+    ids: list[str] = field(default_factory=list)
 
 @dataclass
 class IngestionCfg:
@@ -57,6 +58,7 @@ def load_config(env_path: str = ".env", config_path: str = "config.yaml") -> App
         targets=Targets(
             groups=t.get("groups", []), communities=t.get("communities", []),
             channels=t.get("channels", []), contacts=t.get("contacts", []),
+            ids=t.get("ids", []),
         ),
         ingestion=IngestionCfg(
             capture_events=i.get("capture_events", ["post","put","delete","status"]),

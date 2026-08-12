@@ -43,7 +43,7 @@ def _id_type(s: str) -> str:
 def _targets_hash(targets: Targets) -> str:
     """Stable hash of the target lists; changes when you edit config.yaml targets."""
     parts = []
-    for k in ("groups", "communities", "channels", "contacts"):
+    for k in ("groups", "communities", "channels", "contacts", "ids"):
         parts.append(f"{k}:" + "|".join(sorted(getattr(targets, k))))
     return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
 
@@ -53,34 +53,28 @@ class Resolver:
         self.unresolved: list[str] = []
         self.cache_hit: bool = False
 
-    def _direct_ids(self, targets: Targets) -> tuple[dict[str, dict], Targets]:
-        """Pull entries that are already chat IDs out of targets. Returns the
-        allowlist built from those IDs and a new Targets of only the remaining
-        (name/phone) entries that still need API resolution."""
+    def _ids_to_allowlist(self, ids: list[str]) -> dict[str, dict]:
+        """Build an allowlist directly from raw chat IDs in the `ids` field —
+        no API calls. Contact phones are matched in BOTH forms."""
         allow: dict[str, dict] = {}
-        remaining = {k: [] for k in ("groups", "communities", "channels", "contacts")}
-        cat_type = {"groups": "group", "communities": "group", "channels": "channel"}
-        for cat in ("groups", "communities", "channels"):
-            for entry in getattr(targets, cat):
-                if _looks_like_id(entry):
-                    allow[entry] = {"type": cat_type[cat], "name": entry}
-                else:
-                    remaining[cat].append(entry)
-        for entry in targets.contacts:
+        for entry in ids:
             hit = _contact_allowlist(entry)
             if hit is not None:
                 allow.update(hit)
             elif _looks_like_id(entry):
                 allow[entry] = {"type": _id_type(entry), "name": entry}
             else:
-                remaining["contacts"].append(entry)
-        return allow, Targets(**remaining)
+                allow[entry] = {"type": "unknown", "name": entry}
+        return allow
 
     async def resolve(self, targets: Targets) -> dict[str, dict]:
-        allow, names = self._direct_ids(targets)
+        # Raw IDs from the `ids` field are used directly (0 API calls).
+        allow = self._ids_to_allowlist(targets.ids)
 
-        # If every target is already an ID, skip the API entirely (0 requests).
-        if not any(getattr(names, k) for k in ("groups", "communities", "channels", "contacts")):
+        # groups / communities / channels / contacts keep working as before:
+        # they are names or phones resolved via the API.
+        has_named = any(getattr(targets, k) for k in ("groups", "communities", "channels", "contacts"))
+        if not has_named:
             return allow
 
         chats = await self.client.get_chats()
@@ -104,14 +98,14 @@ class Resolver:
                 phone_index[_norm_phone(phone)] = ct["id"]
 
         for label, kind in [("groups", "group"), ("communities", "group"), ("channels", "channel")]:
-            for name in getattr(names, label):
+            for name in getattr(targets, label):
                 hit = name_index.get(name.lower())
                 if hit:
                     allow[hit["id"]] = {"type": kind if kind != "group" else hit["type"], "name": name}
                 else:
                     self.unresolved.append(name)
 
-        for entry in names.contacts:
+        for entry in targets.contacts:
             digits = _norm_phone(entry)
             resolved_id = None
             if digits and digits in phone_index:

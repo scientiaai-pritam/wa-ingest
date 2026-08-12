@@ -1,8 +1,14 @@
 targets:
-  groups: ["Thora photos dedo 🤳🏻",]
+  # groups / contacts below are NAMES or PHONES, resolved via the whapi API.
+  groups: []
   communities: []
   channels: []
-  contacts: ["+918799507812","919512843906", J.N.B, Sayanta]
+  contacts: []
+  # ids: raw chat IDs used directly — NO API resolution (0 requests).
+  ids:
+    - "120363298579412558@g.us"   # Thora photos dedo 🤳🏻 (group)
+    - "918799507812"              # contact (matched in both forms)
+    - "919512843906"              # contact
 
 ingestion:
   capture_events: ["post", "put", "delete", "status"]

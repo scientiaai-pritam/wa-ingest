@@ -11,18 +11,19 @@ class FakeClient:
 
 @pytest.mark.asyncio
 async def test_resolve_group_by_name_and_contact_by_phone():
+    # groups/contacts fields work as before: names + phones resolved via the API.
     client = FakeClient(
         groups=[{"id": "g1@g.us", "name": "Project Team"}],
-        chats=[{"id": "g1@g.us", "type": "group", "name": "Project Team"}],
-        contacts=[],
+        chats=[{"id": "g1@g.us", "type": "group", "name": "Project Team"},
+               {"id": "91@s.whatsapp.net", "type": "contact", "name": "Mom"}],
+        contacts=[{"id": "91@s.whatsapp.net", "phone": "+919999999991", "name": "Mom"}],
     )
     r = Resolver(client)
     allow = await r.resolve(Targets(groups=["Project Team"], contacts=["+919999999991"]))
     assert "g1@g.us" in allow
     assert allow["g1@g.us"]["type"] == "group"
-    # contact phone is used directly in BOTH forms, no API resolution for it
-    assert "919999999991" in allow
-    assert "919999999991@s.whatsapp.net" in allow
+    assert "91@s.whatsapp.net" in allow
+    assert allow["91@s.whatsapp.net"]["type"] == "contact"
     assert r.unresolved == []
 
 @pytest.mark.asyncio
@@ -52,14 +53,12 @@ async def test_resolve_cached_avoids_refetch_on_restart(tmp_path):
         chats=[{"id": "g1@g.us", "type": "group", "name": "Project Team"}],
         contacts=[{"id": "91@s.whatsapp.net", "phone": "+919999999991", "name": "Mom"}],
     )
-    # First start: resolves via API (3 calls) and writes cache
     c1 = CountingClient(**data)
     allow1 = await Resolver(c1).resolve_cached(targets, cache_path=str(cache))
     assert "g1@g.us" in allow1
     assert c1.calls == 3
     assert cache.exists()
 
-    # Second start, same targets: loads from cache, 0 API calls
     c2 = CountingClient(**data)
     r2 = Resolver(c2)
     allow2 = await r2.resolve_cached(targets, cache_path=str(cache))
@@ -77,7 +76,6 @@ async def test_resolve_cached_invalidates_when_targets_change(tmp_path):
     )
     await Resolver(CountingClient(**data)).resolve_cached(
         Targets(groups=["Project Team"]), cache_path=str(cache))
-    # Changing targets -> hash differs -> re-resolve via API
     c2 = CountingClient(**data)
     r2 = Resolver(c2)
     allow2 = await r2.resolve_cached(Targets(groups=["Other"]), cache_path=str(cache))
@@ -93,14 +91,14 @@ class ExplodingClient:
 
 
 @pytest.mark.asyncio
-async def test_ids_only_skips_api_entirely():
-    # All targets are chat IDs -> zero API calls.
+async def test_ids_field_skips_api_entirely():
+    # The `ids` field is used directly -> zero API calls.
     r = Resolver(ExplodingClient())
-    allow = await r.resolve(Targets(
-        groups=["120363abc@g.us"],
-        contacts=["919984351847@s.whatsapp.net"],
-        channels=["120363zzz@newsletter"],
-    ))
+    allow = await r.resolve(Targets(ids=[
+        "120363abc@g.us",
+        "919984351847@s.whatsapp.net",
+        "120363zzz@newsletter",
+    ]))
     assert set(allow) == {"120363abc@g.us", "120363zzz@newsletter",
                           "919984351847", "919984351847@s.whatsapp.net"}
     assert allow["120363abc@g.us"]["type"] == "group"
@@ -111,40 +109,37 @@ async def test_ids_only_skips_api_entirely():
 
 
 @pytest.mark.asyncio
-async def test_mixed_ids_and_names_uses_id_directly_and_resolves_name():
+async def test_mixed_ids_field_and_named_groups():
+    # ids used directly + a named group resolved via API.
     client = CountingClient(
         groups=[{"id": "g_name@g.us", "name": "By Name"}],
         chats=[{"id": "g_name@g.us", "type": "group", "name": "By Name"}],
         contacts=[],
     )
     r = Resolver(client)
-    allow = await r.resolve(Targets(groups=["g_id@g.us", "By Name"]))
-    # the ID entry is used directly, the name is resolved via API
+    allow = await r.resolve(Targets(groups=["By Name"], ids=["g_id@g.us"]))
     assert "g_id@g.us" in allow and allow["g_id@g.us"]["type"] == "group"
     assert "g_name@g.us" in allow
-    assert client.calls == 3  # API was needed for the name entry
+    assert client.calls == 3  # API was needed for the named group
 
 
 @pytest.mark.asyncio
-async def test_ids_only_cached_zero_calls_on_first_run(tmp_path):
+async def test_ids_field_cached_zero_calls_on_first_run(tmp_path):
     cache = tmp_path / "allowlist.json"
-    targets = Targets(groups=["120363abc@g.us"])
+    targets = Targets(ids=["120363abc@g.us"])
     c = CountingClient(groups=[], chats=[], contacts=[])
     allow = await Resolver(c).resolve_cached(targets, cache_path=str(cache))
     assert "120363abc@g.us" in allow
-    assert c.calls == 0  # no API even on first run, and no cache either
+    assert c.calls == 0  # no API even on first run
 
 
 @pytest.mark.asyncio
-async def test_contact_by_bare_phone_and_by_jid_both_forms():
-    # bare digits (as returned by whapi /contacts) and full JID both work
+async def test_ids_field_contact_both_forms():
+    # bare digits (as whapi /contacts returns) and full JID both match
     r = Resolver(ExplodingClient())
-    allow = await r.resolve(Targets(contacts=["919468930964", "918799507812@s.whatsapp.net"]))
+    allow = await r.resolve(Targets(ids=["919468930964", "918799507812@s.whatsapp.net"]))
     assert allow["919468930964"]["type"] == "contact"
     assert "919468930964@s.whatsapp.net" in allow
     assert allow["918799507812@s.whatsapp.net"]["type"] == "contact"
     assert "918799507812" in allow
     assert r.unresolved == []
-
-
-
