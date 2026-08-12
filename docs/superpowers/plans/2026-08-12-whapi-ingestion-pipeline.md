@@ -1,6 +1,6 @@
 # WhatsApp (whapi) Ingestion Pipeline — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** A receive-only Python/FastAPI service that ingests WhatsApp messages from whapi.cloud webhooks for configured groups/contacts into an append-only JSONL raw lake with local media, resilient to outages via a periodic backfill job.
 
@@ -70,7 +70,7 @@ wa-ingest/
 **Interfaces:**
 - Produces: `app.config.load_config(env_path=".env", config_path="config.yaml") -> AppConfig`, and dataclasses `AppConfig`, `Targets`, `IngestionCfg`, `BackfillCfg`, `MediaCfg`, `EnvCfg` with the fields used by later tasks.
 
-- [ ] **Step 1: Write `requirements.txt` and `pyproject.toml`**
+- [x] **Step 1: Write `requirements.txt` and `pyproject.toml`**
 
 `requirements.txt`:
 ```
@@ -99,7 +99,7 @@ testpaths = ["tests"]
 # optional; not required
 ```
 
-- [ ] **Step 2: Write `.gitignore`, `.env.example`, `config.yaml`**
+- [x] **Step 2: Write `.gitignore`, `.env.example`, `config.yaml`**
 
 `.gitignore`:
 ```
@@ -143,7 +143,7 @@ media:
   retry_attempts: 3
 ```
 
-- [ ] **Step 3: Write the failing test**
+- [x] **Step 3: Write the failing test**
 
 `tests/conftest.py`:
 ```python
@@ -187,12 +187,12 @@ def test_load_config_parses_targets_and_env(tmp_path, monkeypatch):
     assert cfg.ingestion.capture_events == ["post", "put", "delete", "status"]
 ```
 
-- [ ] **Step 4: Run test to verify it fails**
+- [x] **Step 4: Run test to verify it fails**
 
 Run: `pytest tests/test_config.py -v`
 Expected: FAIL (module `app.config` not found / import error).
 
-- [ ] **Step 5: Write `app/config.py`**
+- [x] **Step 5: Write `app/config.py`**
 
 ```python
 from dataclasses import dataclass, field
@@ -280,12 +280,12 @@ def load_config(env_path: str = ".env", config_path: str = "config.yaml") -> App
 
 `app/__init__.py`: empty file.
 
-- [ ] **Step 6: Run test to verify it passes**
+- [x] **Step 6: Run test to verify it passes**
 
 Run: `pytest tests/test_config.py -v`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A
@@ -312,7 +312,7 @@ git commit -m "feat: project scaffold and config loading"
   - `async def update_settings(self, settings: dict) -> dict`
   - `async def aclose(self) -> None`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/test_whapi_client.py`:
 ```python
@@ -387,12 +387,12 @@ async def _noop(_): return
 monkeypatch.setattr("app.whapi_client._sleep", _noop)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_whapi_client.py -v`
 Expected: FAIL (module not found).
 
-- [ ] **Step 3: Write `app/whapi_client.py`**
+- [x] **Step 3: Write `app/whapi_client.py`**
 
 ```python
 import asyncio, random
@@ -476,12 +476,12 @@ class WhapiClient:
         await self._client.aclose()
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/test_whapi_client.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/whapi_client.py tests/test_whapi_client.py
@@ -508,7 +508,7 @@ git commit -m "feat: throttled WhapiClient with bearer auth and retry"
   - `media_dir(chat_id: str, date_str: str) -> str`  (path for media files)
   - static `safe_name(chat_id: str) -> str`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/test_store.py`:
 ```python
@@ -551,12 +551,12 @@ def test_safe_name_sanitizes_chat_id():
     assert Store.safe_name("91 999@s.whatsapp.net") == "91_999_s_whatsapp_net"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_store.py -v`
 Expected: FAIL (module not found).
 
-- [ ] **Step 3: Write `app/store.py`**
+- [x] **Step 3: Write `app/store.py`**
 
 ```python
 import json, re, sqlite3, threading
@@ -642,12 +642,12 @@ class Store:
         self._append(self._event_path(chat_id, ts), record)
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/test_store.py -v`
 Expected: PASS. (Note: the `test_append_media_record_appends_second_line` test references `s.append_event.__self__._event_path` only in a comment line, then reads via glob — remove that dead line if it errors. It is a no-op attribute expression that evaluates fine but is unused; keep it clean by deleting that line before running.)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/store.py tests/test_store.py
@@ -669,7 +669,7 @@ git commit -m "feat: Store with sqlite dedup, JSONL append, backfill cursor"
   - `async def resolve(self, targets: Targets) -> dict[str, dict]`  → `{chat_id: {"type": "group"|"contact"|"channel", "name": str}}`
   - `self.unresolved: list[str]` populated with names that did not match.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/test_resolver.py`:
 ```python
@@ -709,12 +709,12 @@ async def test_unresolved_name_recorded():
     assert "Nope" in r.unresolved
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_resolver.py -v`
 Expected: FAIL.
 
-- [ ] **Step 3: Write `app/resolver.py`**
+- [x] **Step 3: Write `app/resolver.py`**
 
 ```python
 from app.config import Targets
@@ -778,12 +778,12 @@ class Resolver:
         return allow
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/test_resolver.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/resolver.py tests/test_resolver.py
@@ -808,7 +808,7 @@ git commit -m "feat: resolver mapping target names/phones to chat_ids"
 
 The payload shape: the full whapi webhook body `{"channel_id":..., "event":{...}, "messages":[...]}`. Filtering by chat_id already happened in the receiver, but the worker re-checks defensively.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/test_worker.py`:
 ```python
@@ -866,12 +866,12 @@ async def test_ignored_event_not_written(tmp_data_dir):
     assert n == 0
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_worker.py -v`
 Expected: FAIL.
 
-- [ ] **Step 3: Write `app/worker.py`**
+- [x] **Step 3: Write `app/worker.py`**
 
 ```python
 import asyncio, time
@@ -947,12 +947,12 @@ class EventWorker:
                 self.eq.task_done()
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/test_worker.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/worker.py tests/test_worker.py
@@ -976,7 +976,7 @@ git commit -m "feat: event worker with dedup, JSONL append, media enqueue"
 
 Extension from mime: a small map; default `.bin`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/test_media.py`:
 ```python
@@ -1030,12 +1030,12 @@ async def test_failed_download_appends_failed_record(tmp_data_dir, monkeypatch):
     assert media_rec[0]["media"]["status"] == "failed"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_media.py -v`
 Expected: FAIL.
 
-- [ ] **Step 3: Write `app/media.py`**
+- [x] **Step 3: Write `app/media.py`**
 
 ```python
 import asyncio, random, time
@@ -1108,12 +1108,12 @@ class MediaDownloader:
                 break
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/test_media.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/media.py tests/test_media.py
@@ -1136,7 +1136,7 @@ git commit -m "feat: media downloader with bounded retry and append-only media r
   - `async def run_once(self) -> int`  (sum across chats)
   - The job enqueues payloads of the same shape the worker expects, with `_source="backfill"` and `event={"type":"messages","event":"post"}`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/test_backfill.py`:
 ```python
@@ -1181,12 +1181,12 @@ async def test_backfill_stops_when_no_new(tmp_data_dir):
     assert n == 0
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_backfill.py -v`
 Expected: FAIL.
 
-- [ ] **Step 3: Write `app/backfill.py`**
+- [x] **Step 3: Write `app/backfill.py`**
 
 ```python
 import asyncio
@@ -1231,12 +1231,12 @@ class BackfillJob:
         return total
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/test_backfill.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/backfill.py tests/test_backfill.py
@@ -1260,7 +1260,7 @@ git commit -m "feat: backfill job feeding history into the event queue"
 
 The receiver does **not** write files; it filters and enqueues only. Filtering rules: drop messages whose `chat_id` not in allowlist; drop events whose `event.event` not in capture_events; drop `from_me` if not include_outgoing. If anything survives, enqueue one payload (with `_source="webhook"`); else still `200` but count `filtered`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/test_receiver.py`:
 ```python
@@ -1311,12 +1311,12 @@ def test_full_queue_returns_503():
     assert r.status_code == 503
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_receiver.py -v`
 Expected: FAIL.
 
-- [ ] **Step 3: Write `app/receiver.py`**
+- [x] **Step 3: Write `app/receiver.py`**
 
 ```python
 import asyncio
@@ -1367,12 +1367,12 @@ def create_app(*, webhook_secret: str, allowlist: dict, capture_events: list[str
     return app
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/test_receiver.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/receiver.py tests/test_receiver.py
@@ -1391,7 +1391,7 @@ git commit -m "feat: webhook receiver with secret, allowlist filter, 503 backpre
 - Consumes: all prior components + `AppConfig`.
 - Produces: `build_application(config: AppConfig) -> tuple[FastAPI, list[asyncio.Task], callable]` and `create_app_for_uvicorn()` for `uvicorn app.main:app`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/test_main.py`:
 ```python
@@ -1414,12 +1414,12 @@ async def test_build_application_returns_fastapi_and_tasks():
     shutdown()
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_main.py -v`
 Expected: FAIL.
 
-- [ ] **Step 3: Write `app/main.py`**
+- [x] **Step 3: Write `app/main.py`**
 
 ```python
 import asyncio, logging
@@ -1508,12 +1508,12 @@ if __name__ == "__main__":
 
 Notes: `Resolver.resolve()` returns a plain `dict` (the allowlist); unresolved names are on the `Resolver` instance's `.unresolved` list, so we keep the `resolver` object to read it. Launch with `python -m app.main`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/test_main.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Write `run.sh` and a README snippet**
+- [x] **Step 5: Write `run.sh` and a README snippet**
 
 `run.sh`:
 ```bash
@@ -1537,7 +1537,7 @@ Receive-only WhatsApp ingestion via whapi.cloud.
 6. `bash run.sh`
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/main.py run.sh README.md tests/test_main.py
@@ -1553,7 +1553,7 @@ git commit -m "feat: main wiring with scheduler, worker tasks, and run entrypoin
 
 **Goal:** prove the full path (webhook → worker → store + media; backfill fills an offline gap) works together with fakes, no network.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/test_end_to_end.py`:
 ```python
@@ -1624,12 +1624,12 @@ def _find_queue(app):
 
 To make `_find_queue` work, expose the queue on `app.state` in `create_receiver` (add `app.state.event_queue = event_queue`). Add that one line to `app/receiver.py` in this task.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_end_to_end.py -v`
 Expected: FAIL (queue not exposed / wiring gap).
 
-- [ ] **Step 3: Expose queue on app state**
+- [x] **Step 3: Expose queue on app state**
 
 In `app/receiver.py`, inside `create_app`, after constructing `app`, add:
 ```python
@@ -1638,17 +1638,17 @@ In `app/receiver.py`, inside `create_app`, after constructing `app`, add:
 ```
 (Place it just before the route definitions or right after `app = FastAPI(...)`.)
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/test_end_to_end.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Run the full suite**
+- [x] **Step 5: Run the full suite**
 
 Run: `pytest -v`
 Expected: all tests PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tests/test_end_to_end.py app/receiver.py
@@ -1684,7 +1684,7 @@ git commit -m "test: end-to-end webhook->store->media and backfill gap-fill"
 **Interfaces:**
 - Produces: `async def sweep_failed(store, media_queue, *, lookback_days=2, now=time.time) -> int` in `app/media.py` — scans recent JSONL daily files for `kind:"media"` records with `status:"failed"` or `"retry"`, and re-enqueues a download task for each (dedup against queue not required; the downloader is idempotent on file overwrite). Returns count re-enqueued. Records older than `lookback_days` are skipped.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/test_media_sweep.py`:
 ```python
@@ -1715,12 +1715,12 @@ async def test_sweep_reenqueues_failed_media(tmp_data_dir):
     assert files
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_media_sweep.py -v`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement `sweep_failed` in `app/media.py`**
+- [x] **Step 3: Implement `sweep_failed` in `app/media.py`**
 
 ```python
 from datetime import datetime, timedelta, timezone
@@ -1762,7 +1762,7 @@ async def sweep_failed(store, media_queue, *, lookback_days: int = 2, now=time.t
 
 For this to work, `MediaDownloader.process_one` must write `chat_id` and `ts` onto the media record it appends. Update the two `rec = {...}` blocks in `app/media.py` to include `"chat_id": chat_id, "ts": ts,` at the top level of the record (alongside `"kind"` and `"message_id"`).
 
-- [ ] **Step 4: Update `app/main.py` scheduler to run the sweep hourly**
+- [x] **Step 4: Update `app/main.py` scheduler to run the sweep hourly**
 
 In `build_application`, add:
 ```python
@@ -1772,17 +1772,17 @@ In `build_application`, add:
     scheduler.add_job(sweep_job, "interval", hours=1, id="media-sweep")
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `pytest tests/test_media_sweep.py tests/test_media.py -v`
 Expected: PASS.
 
-- [ ] **Step 6: Run the full suite**
+- [x] **Step 6: Run the full suite**
 
 Run: `pytest -v`
 Expected: all PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app/media.py app/main.py tests/test_media_sweep.py
