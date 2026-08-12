@@ -1,6 +1,9 @@
-import asyncio
+import asyncio, logging
+import httpx
 from app.store import Store
 from app.whapi_client import WhapiClient
+
+log = logging.getLogger("wa-ingest")
 
 class BackfillJob:
     def __init__(self, client: WhapiClient, store: Store, event_queue: asyncio.Queue, *,
@@ -44,10 +47,31 @@ class BackfillJob:
                 break
         return total
 
+    def _fetch_chat_ids(self) -> list[str]:
+        """Chat IDs to backfill, in JID form.
+
+        The allowlist keeps a contact under BOTH its bare phone and its
+        @s.whatsapp.net JID (webhooks may use either), but whapi's
+        /messages/list/{ChatID} rejects a bare phone (400). Fetch the JID
+        form only; bare entries that have a JID twin are skipped."""
+        ids = []
+        for chat_id in self.allowlist:
+            if "@" in chat_id:
+                ids.append(chat_id)
+            elif f"{chat_id}@s.whatsapp.net" in self.allowlist:
+                continue  # covered by the JID twin
+            else:
+                log.warning("backfill: skipping non-JID allowlist entry %r", chat_id)
+        return ids
+
     async def run_once(self) -> int:
         total = 0
-        for chat_id in self.allowlist:
-            last_id, last_ts = self.store.get_last_seen(chat_id)
-            is_initial = last_id is None
-            total += await self.backfill_chat(chat_id, is_initial)
+        for chat_id in self._fetch_chat_ids():
+            try:
+                last_id, last_ts = self.store.get_last_seen(chat_id)
+                is_initial = last_id is None
+                total += await self.backfill_chat(chat_id, is_initial)
+            except httpx.HTTPError as exc:
+                # One dead/missing chat must not kill the whole pass.
+                log.warning("backfill: skipping chat %s (%s)", chat_id, exc)
         return total

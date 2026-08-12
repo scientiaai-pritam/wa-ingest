@@ -33,11 +33,23 @@ class MediaDownloader:
 
     async def _process(self, task: dict) -> None:
         mid = task["message_id"]; chat_id = task["chat_id"]; ts = task["ts"]
-        link = task["link"]; mime = task.get("mime"); attempts = task.get("attempts", 0)
+        link = task.get("link"); media_id = task.get("media_id")
+        mime = task.get("mime"); attempts = task.get("attempts", 0)
         date_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
         ext = _ext(mime)
+        if not link and not media_id:
+            self._bump("media_failed")
+            rec = {"kind": "media", "chat_id": chat_id, "ts": ts, "message_id": mid,
+                   "media": {"status": "failed", "attempts": attempts, "link": None,
+                             "media_id": None, "mime": mime,
+                             "updated_at": int(self.now())}}
+            self.store.append_media_record(chat_id, ts, rec)
+            return
         try:
-            data = await self.client.download_media(link)
+            if link:
+                data = await self.client.download_media(link)
+            else:
+                data = await self.client.get_media(media_id)
         except Exception:
             attempts += 1
             status = "failed" if attempts >= self.retry_attempts else "retry"
@@ -45,7 +57,8 @@ class MediaDownloader:
                 self._bump("media_failed")
             rec = {"kind": "media", "chat_id": chat_id, "ts": ts, "message_id": mid,
                    "media": {"status": status, "attempts": attempts,
-                             "link": link, "mime": mime, "updated_at": int(self.now())}}
+                             "link": link, "media_id": media_id, "mime": mime,
+                             "updated_at": int(self.now())}}
             self.store.append_media_record(chat_id, ts, rec)
             return
         target_dir = self.store.media_dir(chat_id, date_str)
@@ -110,7 +123,8 @@ async def sweep_failed(store, media_queue, *, lookback_days: int = 2, now=time.t
             if not chat_id or ts is None or ts < cutoff:
                 continue
             await media_queue.put({"message_id": rec["message_id"], "chat_id": chat_id, "ts": ts,
-                                   "link": media.get("link"), "mime": media.get("mime"),
+                                   "link": media.get("link"), "media_id": media.get("media_id"),
+                                   "mime": media.get("mime"),
                                    "attempts": media.get("attempts", 0)})
             count += 1
     return count

@@ -62,12 +62,30 @@ class WhapiClient:
         return await self._get_list("/chats", "chats")
 
     async def get_messages(self, chat_id: str, count: int = 100, offset: int = 0) -> list[dict]:
-        params = {"chat_id": chat_id, "count": count, "offset": offset}
-        return await self._get_list("/messages", "messages", params)
+        # whapi exposes message history at /messages/list/{ChatID}; a bare phone
+        # number is rejected (400) — the ChatID must carry an @suffix.
+        params = {"count": count, "offset": offset}
+        return await self._get_list(f"/messages/list/{chat_id}", "messages", params)
+
+    # Media downloads hit whapi's S3-backed store, which can be slow to first
+    # byte; allow well beyond the default 30s read timeout. The downloader's
+    # retry loop covers genuine failures.
+    _MEDIA_TIMEOUT = httpx.Timeout(90.0)
 
     async def download_media(self, url: str) -> bytes:
         await self._throttle()
-        resp = await self._client.get(url, headers=self._headers())
+        resp = await self._client.get(url, headers=self._headers(), timeout=self._MEDIA_TIMEOUT)
+        resp.raise_for_status()
+        return resp.content
+
+    async def get_media(self, media_id: str) -> bytes:
+        """Fetch a file by media ID (GET /media/{MediaID}).
+
+        Used when a message carries a media `id` but no download `link`
+        (whapi webhooks without the "Auto Download" setting)."""
+        await self._throttle()
+        resp = await self._client.get(f"{self.base_url}/media/{media_id}",
+                                      headers=self._headers(), timeout=self._MEDIA_TIMEOUT)
         resp.raise_for_status()
         return resp.content
 

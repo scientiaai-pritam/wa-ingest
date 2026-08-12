@@ -20,7 +20,7 @@ async def test_get_groups_sends_bearer_and_returns_list():
     assert groups == [{"id": "g1@g.us", "name": "Project Team"}]
 
 @pytest.mark.asyncio
-async def test_get_messages_passes_count_offset_and_chat():
+async def test_get_messages_uses_list_path_and_passes_count_offset():
     seen = {}
     def handler(req):
         seen["url"] = str(req.url)
@@ -28,9 +28,10 @@ async def test_get_messages_passes_count_offset_and_chat():
     c = make_client(handler)
     msgs = await c.get_messages("g1@g.us", count=50, offset=10)
     await c.aclose()
-    assert "chat_id=g1%40g.us" in seen["url"]
+    assert "/messages/list/g1@g.us" in seen["url"]
     assert "count=50" in seen["url"]
     assert "offset=10" in seen["url"]
+    assert "chat_id=" not in seen["url"]
     assert msgs == [{"id": "m1"}]
 
 @pytest.mark.asyncio
@@ -42,6 +43,20 @@ async def test_download_media_returns_bytes_with_bearer():
     c = make_client(handler)
     data = await c.download_media("https://cdn.example/file.jpg")
     await c.aclose()
+    assert data == b"IMAGEDATA"
+    assert seen["auth"] == "Bearer tok"
+
+@pytest.mark.asyncio
+async def test_get_media_returns_bytes_with_bearer():
+    seen = {}
+    def handler(req):
+        seen["url"] = str(req.url)
+        seen["auth"] = req.headers.get("authorization")
+        return httpx.Response(200, content=b"IMAGEDATA")
+    c = make_client(handler)
+    data = await c.get_media("media-123")
+    await c.aclose()
+    assert "/media/media-123" in seen["url"]
     assert data == b"IMAGEDATA"
     assert seen["auth"] == "Bearer tok"
 

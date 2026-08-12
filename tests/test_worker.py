@@ -32,6 +32,22 @@ async def test_writes_message_and_enqueues_media(tmp_data_dir):
     assert task["link"] == "https://cdn/x.jpg"
 
 @pytest.mark.asyncio
+async def test_media_without_link_enqueues_media_id(tmp_data_dir):
+    """whapi webhooks without Auto Download carry only image.id — the worker
+    must still enqueue a media task (via media_id) instead of dropping it."""
+    store = Store(tmp_data_dir)
+    eq, mq = asyncio.Queue(), asyncio.Queue()
+    w = EventWorker(store, eq, mq, allowlist={"g@g.us": {}}, capture_events=["post"],
+                    include_outgoing=True, now=lambda: 1000)
+    payload = {"event": {"event": "post"}, "messages": [
+        {"id": "m1", "chat_id": "g@g.us", "timestamp": 1700000000,
+         "image": {"id": "media-123", "mime_type": "image/jpeg"}}]}
+    await w.handle(payload)
+    task = mq.get_nowait()
+    assert task["link"] is None
+    assert task["media_id"] == "media-123"
+
+@pytest.mark.asyncio
 async def test_dedup_skips_already_seen(tmp_data_dir):
     store = Store(tmp_data_dir)
     store.record_seen("g@g.us", "m1", 1700000000, "webhook")

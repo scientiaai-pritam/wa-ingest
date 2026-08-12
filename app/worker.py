@@ -1,12 +1,18 @@
 import asyncio, time
 from app.store import Store
 
-def _extract_media_link(message: dict) -> tuple[str | None, str | None]:
+def _extract_media(message: dict) -> tuple[str | None, str | None, str | None]:
+    """Return (link, mime_type, media_id) for the first media attachment.
+
+    whapi webhook payloads without the "Auto Download" setting carry only the
+    media `id` (plus a thumbnail `preview`) — no download `link`. Prefer the
+    link when present, but keep the id so the downloader can fetch the file
+    via GET /media/{id}."""
     for key in ("image", "video", "gif", "audio", "voice", "document", "sticker", "thumbnail"):
         obj = message.get(key)
-        if isinstance(obj, dict) and obj.get("link"):
-            return obj["link"], obj.get("mime_type")
-    return None, None
+        if isinstance(obj, dict) and (obj.get("link") or obj.get("id")):
+            return obj.get("link"), obj.get("mime_type"), obj.get("id")
+    return None, None, None
 
 class EventWorker:
     def __init__(self, store: Store, event_queue: asyncio.Queue, media_queue: asyncio.Queue, *,
@@ -57,10 +63,11 @@ class EventWorker:
             last_id, last_ts = self.store.get_last_seen(chat_id)
             if last_ts is None or ts >= last_ts:
                 self.store.set_last_seen(chat_id, mid, ts)
-            link, mime = _extract_media_link(message)
-            if link:
+            link, mime, media_id = _extract_media(message)
+            if link or media_id:
                 await self.mq.put({"message_id": mid, "chat_id": chat_id, "ts": ts,
-                                   "link": link, "mime": mime, "attempts": 0})
+                                   "link": link, "media_id": media_id,
+                                   "mime": mime, "attempts": 0})
             self._bump("written")
             written += 1
         return written

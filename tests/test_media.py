@@ -36,6 +36,33 @@ async def test_downloads_and_appends_media_record(tmp_data_dir):
     assert counters.get("media_ok") == 1
 
 @pytest.mark.asyncio
+async def test_downloads_by_media_id_when_no_link(tmp_data_dir):
+    """Webhook media (no Auto Download) has an id but no link — the downloader
+    fetches via client.get_media(media_id) instead."""
+    store = Store(tmp_data_dir)
+    store.append_event("g@g.us", 1700000000, {"message": {"id": "m1"}, "media": None})
+    mq = asyncio.Queue()
+    await mq.put({"message_id": "m1", "chat_id": "g@g.us", "ts": 1700000000,
+                  "link": None, "media_id": "media-123", "mime": "image/jpeg", "attempts": 0})
+    await mq.put(None)
+
+    class IdClient:
+        def __init__(self): self.fetched = None
+        async def get_media(self, media_id):
+            self.fetched = media_id
+            return b"IMG"
+
+    c = IdClient()
+    counters = {}
+    d = MediaDownloader(c, store, mq, max_concurrent=1, jitter_ms=(0, 0),
+                        now=lambda: 2000, counters=counters)
+    await d.run()
+    assert c.fetched == "media-123"
+    media_files = glob.glob(os.path.join(tmp_data_dir, "media", "**", "*"), recursive=True)
+    assert any(f.endswith("m1.jpg") for f in media_files)
+    assert counters.get("media_ok") == 1
+
+@pytest.mark.asyncio
 async def test_failed_download_appends_failed_record(tmp_data_dir):
     store = Store(tmp_data_dir)
     store.append_event("g@g.us", 1700000000, {"message": {"id": "m1"}, "media": None})
