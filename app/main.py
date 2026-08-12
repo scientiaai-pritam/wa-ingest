@@ -29,11 +29,11 @@ def build_application(config: AppConfig, *, allowlist: dict, data_dir: str = "da
     worker = EventWorker(store, event_queue, media_queue, allowlist=allowlist,
                          capture_events=config.ingestion.capture_events,
                          include_outgoing=config.ingestion.include_outgoing,
-                         channel_id="unknown")
+                         channel_id="unknown", counters=metrics)
     downloader = MediaDownloader(client, store, media_queue,
                                  max_concurrent=config.media.max_concurrent_downloads,
                                  jitter_ms=tuple(config.media.download_jitter_ms),
-                                 retry_attempts=config.media.retry_attempts)
+                                 retry_attempts=config.media.retry_attempts, counters=metrics)
     backfill = BackfillJob(client, store, event_queue, allowlist=allowlist,
                            page_size=config.backfill.per_chat_page_size,
                            initial_pages=config.backfill.initial_history_pages)

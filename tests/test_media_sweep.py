@@ -22,7 +22,8 @@ async def test_sweep_reenqueues_failed_media(tmp_data_dir):
     # and the downloader can now succeed (put the task back first)
     await mq.put(task)
     await mq.put(None)
-    d = MediaDownloader(FakeClient(), store, mq, jitter_ms=(0,0), now=lambda:1700000000)
+    d = MediaDownloader(FakeClient(), store, mq, max_concurrent=1,
+                        jitter_ms=(0,0), now=lambda:1700000000)
     await d.run()
     files = glob.glob(os.path.join(tmp_data_dir,"media","**","m1.jpg"), recursive=True)
     assert files

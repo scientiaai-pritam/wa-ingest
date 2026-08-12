@@ -24,11 +24,12 @@ class WhapiClient:
         await self._sem.acquire()
         try:
             async with self._lock:
-                now = asyncio.get_event_loop().time()
+                loop = asyncio.get_running_loop()
+                now = loop.time()
                 wait = self.min_interval - (now - self._last)
                 if wait > 0:
                     await _sleep(wait)
-                self._last = asyncio.get_event_loop().time()
+                self._last = loop.time()
             lo, hi = self.jitter
             if hi > 0:
                 await _sleep(random.uniform(lo, hi) / 1000.0)

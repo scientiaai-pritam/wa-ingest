@@ -14,13 +14,26 @@ class BackfillJob:
 
     async def backfill_chat(self, chat_id: str, is_initial: bool) -> int:
         max_pages = self.initial_pages if is_initial else 1
+        last_id, last_ts = self.store.get_last_seen(chat_id)
         total = 0
         for page in range(max_pages):
             offset = page * self.page_size
             messages = await self.client.get_messages(chat_id, count=self.page_size, offset=offset)
             if not messages:
                 break
-            new = [m for m in messages if not self.store.is_seen(chat_id, m.get("id"))]
+            new = []
+            for m in messages:
+                mid = m.get("id")
+                if not mid:
+                    continue
+                mts = m.get("timestamp")
+                # A message newer than the last-seen cursor is definitively new;
+                # skip the is_seen DB lookup. Dedup (record_seen) still guards store writes.
+                if (not is_initial and last_ts is not None and mts is not None
+                        and mts > last_ts):
+                    new.append(m)
+                elif not self.store.is_seen(chat_id, mid):
+                    new.append(m)
             if not new:
                 break
             payload = {"channel_id": "backfill", "_source": "backfill",

@@ -11,7 +11,7 @@ def _extract_media_link(message: dict) -> tuple[str | None, str | None]:
 class EventWorker:
     def __init__(self, store: Store, event_queue: asyncio.Queue, media_queue: asyncio.Queue, *,
                  allowlist: dict, capture_events: list[str], include_outgoing: bool,
-                 channel_id: str = "unknown", now=time.time):
+                 channel_id: str = "unknown", now=time.time, counters: dict | None = None):
         self.store = store
         self.eq = event_queue
         self.mq = media_queue
@@ -20,6 +20,10 @@ class EventWorker:
         self.include_outgoing = include_outgoing
         self.channel_id = channel_id
         self.now = now
+        self.counters = counters if counters is not None else {}
+
+    def _bump(self, key: str) -> None:
+        self.counters[key] = self.counters.get(key, 0) + 1
 
     @staticmethod
     def build_record(message, channel_id, event, source, ingested_at) -> dict:
@@ -43,6 +47,7 @@ class EventWorker:
             if not mid:
                 continue
             if self.store.is_seen(chat_id, mid):
+                self._bump("deduped")
                 continue
             ts = int(message.get("timestamp") or self.now())
             source = payload.get("_source", "webhook")
@@ -56,6 +61,7 @@ class EventWorker:
             if link:
                 await self.mq.put({"message_id": mid, "chat_id": chat_id, "ts": ts,
                                    "link": link, "mime": mime, "attempts": 0})
+            self._bump("written")
             written += 1
         return written
 

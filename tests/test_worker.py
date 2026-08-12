@@ -51,3 +51,21 @@ async def test_ignored_event_not_written(tmp_data_dir):
     n = await w.handle({"event": {"event": "put"},
                         "messages": [{"id": "m9", "chat_id": "g@g.us", "timestamp": 1700000000}]})
     assert n == 0
+
+@pytest.mark.asyncio
+async def test_counters_track_written_and_deduped(tmp_data_dir):
+    store = Store(tmp_data_dir)
+    store.record_seen("g@g.us", "old", 1700000000, "webhook")
+    eq, mq = asyncio.Queue(), asyncio.Queue()
+    counters = {}
+    w = EventWorker(store, eq, mq, allowlist={"g@g.us": {}}, capture_events=["post"],
+                    include_outgoing=True, now=lambda: 1000, counters=counters)
+    payload = {"event": {"event": "post"}, "messages": [
+        {"id": "old", "chat_id": "g@g.us", "timestamp": 1700000000},   # seen -> deduped
+        {"id": "new", "chat_id": "g@g.us", "timestamp": 1700000001},   # new -> written
+    ]}
+    n = await w.handle(payload)
+    assert n == 1
+    assert counters.get("written") == 1
+    assert counters.get("deduped") == 1
+
