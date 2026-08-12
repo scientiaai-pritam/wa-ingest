@@ -1,0 +1,19 @@
+targets:
+  groups: ["Project Team"]
+  communities: []
+  channels: []
+  contacts: ["+919984351847"]
+
+ingestion:
+  capture_events: ["post", "put", "delete", "status"]
+  include_outgoing: true
+
+backfill:
+  interval_seconds: 600
+  per_chat_page_size: 100
+  initial_history_pages: 5
+
+media:
+  max_concurrent_downloads: 3
+  download_jitter_ms: [100, 500]
+  retry_attempts: 3
