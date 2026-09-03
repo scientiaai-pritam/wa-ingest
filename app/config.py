@@ -22,6 +22,7 @@ class BackfillCfg:
     interval_seconds: int = 600
     per_chat_page_size: int = 100
     initial_history_pages: int = 5
+    window_hours: int | None = None  # only fetch history newer than now - window_hours
 
 @dataclass
 class MediaCfg:
@@ -57,12 +58,12 @@ def load_config(env_path: str = ".env", config_path: str = "config.yaml") -> App
         raise RuntimeError(f"Missing env keys in {env_path}: {missing}")
     return AppConfig(
         targets=Targets(
-            groups=t.get("groups", []), communities=t.get("communities", []),
-            channels=t.get("channels", []), contacts=t.get("contacts", []),
-            ids=t.get("ids", []),
+            groups=t.get("groups") or [], communities=t.get("communities") or [],
+            channels=t.get("channels") or [], contacts=t.get("contacts") or [],
+            ids=t.get("ids") or [],
         ),
         ingestion=IngestionCfg(
-            capture_events=i.get("capture_events", ["post","put","delete","status"]),
+            capture_events=i.get("capture_events") or ["post","put","delete","status"],
             include_outgoing=i.get("include_outgoing", True),
         ),
         backfill=BackfillCfg(
@@ -70,11 +71,12 @@ def load_config(env_path: str = ".env", config_path: str = "config.yaml") -> App
             interval_seconds=b.get("interval_seconds", 600),
             per_chat_page_size=b.get("per_chat_page_size", 100),
             initial_history_pages=b.get("initial_history_pages", 5),
+            window_hours=b.get("window_hours"),
         ),
         media=MediaCfg(
-            max_concurrent_downloads=m.get("max_concurrent_downloads", 3),
-            download_jitter_ms=m.get("download_jitter_ms", [100,500]),
-            retry_attempts=m.get("retry_attempts", 3),
+            max_concurrent_downloads=m.get("max_concurrent_downloads") or 3,
+            download_jitter_ms=m.get("download_jitter_ms") or [100,500],
+            retry_attempts=m.get("retry_attempts") or 3,
         ),
         env=EnvCfg(
             whapi_token=env["WHAPI_TOKEN"],

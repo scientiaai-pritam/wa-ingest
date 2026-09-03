@@ -12,7 +12,8 @@ _MIME_EXT = {
 
 def _ext(mime: str | None) -> str:
     if mime:
-        return _MIME_EXT.get(mime.lower(), ".bin")
+        base = mime.lower().split(";", 1)[0].strip()
+        return _MIME_EXT.get(base, ".bin")
     return ".bin"
 
 class MediaDownloader:

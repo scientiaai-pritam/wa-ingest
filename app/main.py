@@ -1,4 +1,5 @@
 import asyncio, logging, os, sys
+from datetime import datetime
 from fastapi import FastAPI
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -44,15 +45,19 @@ def build_application(config: AppConfig, *, allowlist: dict, data_dir: str = "da
                                  retry_attempts=config.media.retry_attempts, counters=metrics)
     backfill = BackfillJob(client, store, event_queue, allowlist=allowlist,
                            page_size=config.backfill.per_chat_page_size,
-                           initial_pages=config.backfill.initial_history_pages)
+                           initial_pages=config.backfill.initial_history_pages,
+                           window_hours=config.backfill.window_hours)
 
     worker_task = asyncio.create_task(worker.run(), name="event-worker")
     media_task = asyncio.create_task(downloader.run(), name="media-worker")
 
     scheduler = AsyncIOScheduler()
     if config.backfill.enabled:
+        # next_run_time=now: run once immediately at startup (interval jobs
+        # otherwise first fire at now + interval), then every interval.
         scheduler.add_job(backfill.run_once, "interval",
-                          seconds=config.backfill.interval_seconds, id="backfill")
+                          seconds=config.backfill.interval_seconds, id="backfill",
+                          next_run_time=datetime.now())
     async def sweep_job():
         await sweep_failed(store, media_queue)
     scheduler.add_job(sweep_job, "interval", hours=1, id="media-sweep")

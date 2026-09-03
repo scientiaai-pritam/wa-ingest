@@ -1,5 +1,6 @@
 import asyncio
 import httpx
+import time
 import pytest
 from app.store import Store
 from app.backfill import BackfillJob
@@ -77,6 +78,51 @@ async def test_run_once_fetches_jid_not_bare_phone(tmp_data_dir):
     assert "918799507812" not in called
     assert "918799507812@s.whatsapp.net" in called
     assert "120363298579412558@g.us" in called
+
+@pytest.mark.asyncio
+async def test_window_hours_pages_past_initial_cap_until_cutoff(tmp_data_dir):
+    """With window_hours set, the page cap is lifted: backfill keeps paging
+    until it reaches messages older than the cutoff (last 24h etc.)."""
+    now = int(time.time())
+    store = Store(tmp_data_dir)
+    store.set_last_seen("g@g.us", "old", now - 10 * 3600)  # cursor exists -> not initial
+    # 3 pages of 2; page 2 contains one message older than the 24h cutoff.
+    pages = [
+        [{"id": "a", "chat_id": "g@g.us", "timestamp": now},
+         {"id": "b", "chat_id": "g@g.us", "timestamp": now - 100}],
+        [{"id": "c", "chat_id": "g@g.us", "timestamp": now - 20 * 3600},
+         {"id": "d", "chat_id": "g@g.us", "timestamp": now - 23 * 3600}],
+        [{"id": "e", "chat_id": "g@g.us", "timestamp": now - 30 * 3600},  # before cutoff
+         {"id": "f", "chat_id": "g@g.us", "timestamp": now - 40 * 3600}],
+        [{"id": "g", "chat_id": "g@g.us", "timestamp": now - 50 * 3600}],  # never fetched
+    ]
+    client = FakeClient(pages)
+    eq = asyncio.Queue()
+    job = BackfillJob(client, store, eq, allowlist={"g@g.us": {}}, page_size=2,
+                      initial_pages=1, window_hours=24)
+    n = await job.backfill_chat("g@g.us", is_initial=False)
+    # a,b,c,d in window; e,f,g excluded; page 3 never requested
+    assert n == 4
+    assert client.calls[-1][2] == 4  # last fetch offset = page 2
+    ids = []
+    while not eq.empty():
+        ids += [m["id"] for m in eq.get_nowait()["messages"]]
+    assert sorted(ids) == ["a", "b", "c", "d"]
+
+@pytest.mark.asyncio
+async def test_window_hours_capped_without_cutoff_when_history_short(tmp_data_dir):
+    """If the whole history is inside the window, paging stops at exhaustion
+    (empty page), not by the page cap."""
+    now = int(time.time())
+    store = Store(tmp_data_dir)
+    pages = [[{"id": "m1", "chat_id": "g@g.us", "timestamp": now - 60}],
+             [{"id": "m2", "chat_id": "g@g.us", "timestamp": now - 120}]]
+    client = FakeClient(pages)
+    eq = asyncio.Queue()
+    job = BackfillJob(client, store, eq, allowlist={"g@g.us": {}}, page_size=1,
+                      initial_pages=1, window_hours=24)
+    n = await job.backfill_chat("g@g.us", is_initial=True)
+    assert n == 2
 
 @pytest.mark.asyncio
 async def test_run_once_continues_when_a_chat_errors(tmp_data_dir):
