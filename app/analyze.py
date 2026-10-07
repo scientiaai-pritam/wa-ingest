@@ -54,22 +54,27 @@ def iter_records(day: str | None = None, lake: Path = LAKE):
 
 
 def extract_text(msg: dict) -> str:
-    """Text of a message regardless of type (text body, or captions)."""
+    """Text of a message regardless of type (text body, or captions).
+
+    WAHA nests captions at message.text.body for media messages; the nested
+    per-type caption fields are a fallback for other providers (whapi/openwa).
+    """
     mtype = msg.get("type")
+    raw_text = msg.get("text")
+    body = raw_text if isinstance(raw_text, str) else (raw_text or {}).get("body") or ""
     if mtype == "text":
-        return (msg.get("text") or {}).get("body") or ""
+        return body
     if mtype == "image":
-        return (msg.get("image") or {}).get("caption") or ""
+        return body or (msg.get("image") or {}).get("caption") or ""
     if mtype == "video":
-        return (msg.get("video") or {}).get("caption") or ""
+        return body or (msg.get("video") or {}).get("caption") or ""
     if mtype == "document":
         doc = msg.get("document") or {}
-        return doc.get("caption") or doc.get("file_name") or doc.get("filename") or ""
+        return body or doc.get("caption") or doc.get("file_name") or doc.get("filename") or ""
     if mtype == "voice":
         return ""
     if mtype in ("album", "unknown", "action"):
         return ""
-    return ""
     return ""
 
 

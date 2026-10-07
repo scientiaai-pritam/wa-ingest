@@ -35,6 +35,13 @@ def build_application(config: AppConfig, *, allowlist: dict, data_dir: str = "da
                              min_interval_ms=200, jitter_ms=tuple(config.media.download_jitter_ms),
                              max_concurrency=config.media.max_concurrent_downloads)
 
+    # Ingestion provider (whapi | waha | openwa) — None here means legacy whapi path.
+    provider = None
+    if config.ingestion.provider != "whapi":
+        from app.providers import get_provider
+        provider = get_provider(config.ingestion.provider,
+                                **config.ingestion.providers_cfg.get(config.ingestion.provider, {}))
+
     worker = EventWorker(store, event_queue, media_queue, allowlist=allowlist,
                          capture_events=config.ingestion.capture_events,
                          include_outgoing=config.ingestion.include_outgoing,
@@ -42,7 +49,8 @@ def build_application(config: AppConfig, *, allowlist: dict, data_dir: str = "da
     downloader = MediaDownloader(client, store, media_queue,
                                  max_concurrent=config.media.max_concurrent_downloads,
                                  jitter_ms=tuple(config.media.download_jitter_ms),
-                                 retry_attempts=config.media.retry_attempts, counters=metrics)
+                                 retry_attempts=config.media.retry_attempts, counters=metrics,
+                                 provider=provider)
     backfill = BackfillJob(client, store, event_queue, allowlist=allowlist,
                            page_size=config.backfill.per_chat_page_size,
                            initial_pages=config.backfill.initial_history_pages,
@@ -52,21 +60,49 @@ def build_application(config: AppConfig, *, allowlist: dict, data_dir: str = "da
     media_task = asyncio.create_task(downloader.run(), name="media-worker")
 
     scheduler = AsyncIOScheduler()
-    if config.backfill.enabled:
+    if config.backfill.enabled and provider is None:
+        # backfill (history pull) is a whapi capability; other providers are live-only.
         # next_run_time=now: run once immediately at startup (interval jobs
         # otherwise first fire at now + interval), then every interval.
         scheduler.add_job(backfill.run_once, "interval",
                           seconds=config.backfill.interval_seconds, id="backfill",
                           next_run_time=datetime.now())
+    elif provider is not None:
+        log.info("provider=%s: history backfill unavailable (live-only)", provider.name)
     async def sweep_job():
-        await sweep_failed(store, media_queue)
+        if provider is None:
+            # legacy whapi policy: failed+retry re-enqueued, no attempt cap
+            await sweep_failed(store, media_queue)
+        else:
+            await sweep_failed(store, media_queue,
+                               reenqueue_failed=False,
+                               retry_cap=config.media.retry_attempts)
     scheduler.add_job(sweep_job, "interval", hours=1, id="media-sweep")
+
+    # startup reconciliation: re-enqueue media whose download task was lost to
+    # an in-memory queue restart (scan last 7 days for messages w/o media record)
+    from app.media import scan_missing_media
+    async def missing_job():
+        n = await scan_missing_media(store, media_queue, lookback_days=7)
+        if n:
+            log.info("startup media reconciliation: re-enqueued %d missing downloads", n)
+    scheduler.add_job(missing_job, "date", next_run_time=datetime.now(), id="missing-media")
     scheduler.start()
 
+    from app.providers.whapi import WhapiProvider
+    from app.providers.waha import WahaProvider
+    waha_cfg = config.ingestion.providers_cfg.get("waha", {})
+    providers = {"whapi": WhapiProvider(config.env.whapi_base_url, config.env.whapi_token),
+                 "waha": WahaProvider(**waha_cfg)}
+    if provider is not None:
+        providers[provider.name] = provider
     app = create_receiver(webhook_secret=config.env.webhook_secret, allowlist=allowlist,
                           capture_events=config.ingestion.capture_events,
                           include_outgoing=config.ingestion.include_outgoing,
-                          event_queue=event_queue, metrics=metrics)
+                          event_queue=event_queue, metrics=metrics,
+                          providers=providers,
+                          provider_secret=os.getenv("INGEST_SECRET"),
+                          legacy_webhook=(config.ingestion.provider == "whapi"))
     app.state.scheduler = scheduler
 
     def shutdown():
@@ -81,16 +117,23 @@ async def run():
     import uvicorn
     from dotenv import load_dotenv
     from app.config import load_config
-    from app.resolver import Resolver
     load_dotenv()  # .env values become os.environ (real env vars still win)
     cfg = load_config()
-    client = WhapiClient(cfg.env.whapi_base_url, cfg.env.whapi_token)
-    resolver = Resolver(client)
-    allowlist = await resolver.resolve_cached(cfg.targets)
-    if resolver.unresolved:
-        log.warning("Unresolved targets: %s", resolver.unresolved)
-    log.info("Allowlist (%d) [%s]: %s", len(allowlist),
-             "cached" if resolver.cache_hit else "resolved via API", list(allowlist.keys()))
+
+    if cfg.ingestion.provider == "whapi":
+        from app.resolver import Resolver
+        client = WhapiClient(cfg.env.whapi_base_url, cfg.env.whapi_token)
+        resolver = Resolver(client)
+        allowlist = await resolver.resolve_cached(cfg.targets)
+    else:
+        # non-whapi providers: no history/name resolution — use raw ids from
+        # config (`targets.ids`) and let the provider serve group names.
+        allowlist = {}
+        for gid in cfg.targets.ids:
+            allowlist[gid] = {"id": gid}
+        log.info("provider=%s: allowlist from ids (%d)", cfg.ingestion.provider, len(allowlist))
+
+    log.info("Allowlist (%d): %s", len(allowlist), list(allowlist.keys()))
     app, _tasks, shutdown = build_application(cfg, allowlist=allowlist)
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8000"))
@@ -103,3 +146,5 @@ async def run():
 
 if __name__ == "__main__":
     asyncio.run(run())
+
+

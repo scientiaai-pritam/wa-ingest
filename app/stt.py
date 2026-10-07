@@ -76,12 +76,55 @@ def load_voice_notes() -> list[dict]:
                     "ts": msg.get("timestamp"), "from_name": msg.get("from_name"),
                     "seconds": meta.get("seconds"),
                 }
+    try:  # include backfilled messages known only to analytics.db
+        a = sqlite3.connect(ROOT / "data" / "analytics.db")
+        a.row_factory = sqlite3.Row
+        for r in a.execute("SELECT message_id, chat_id, ts, from_name FROM messages WHERE msg_type LIKE '%audio%' OR msg_type LIKE '%voice%'"):
+            if r["message_id"] and r["message_id"] not in msgs:
+                msgs[r["message_id"]] = {"message_id": r["message_id"], "chat_id": r["chat_id"],
+                                         "ts": r["ts"], "from_name": r["from_name"], "seconds": None}
+        for r in a.execute("SELECT message_id, local_path FROM media WHERE status='ok' AND (mime LIKE '%ogg%' OR mime LIKE '%audio%' OR local_path LIKE '%.ogg%')"):
+            if r["message_id"] and r["message_id"] not in media:
+                media[r["message_id"]] = {"local_path": r["local_path"], "status": "ok"}
+        a.close()
+    except sqlite3.OperationalError:
+        pass
     out = []
+    claimed: set[str] = set()
     for mid, m in msgs.items():
         med = media.get(mid) or {}
         lp = med.get("local_path")
+        file = None
         if lp and med.get("status") == "ok" and (ROOT / lp).exists():
-            m["file"] = str(ROOT / lp)
+            file = str(ROOT / lp)
+        if not file:
+            # fallback 1: analytics media table (backfill records)
+            try:
+                a = sqlite3.connect(ROOT / "data" / "analytics.db")
+                a.row_factory = sqlite3.Row
+                row = a.execute("SELECT local_path FROM media WHERE message_id=? AND status='ok'", (mid,)).fetchone()
+                a.close()
+                if row and row["local_path"]:
+                    cand = ROOT / row["local_path"]
+                    if cand.exists():
+                        file = str(cand)
+            except sqlite3.OperationalError:
+                pass
+        if not file:
+            # fallback 2: glob the chat's media date-folder for any audio file
+            if m.get("chat_id") and m.get("ts"):
+                d = dt.datetime.fromtimestamp(m["ts"], LOCAL_TZ).strftime("%Y-%m-%d")
+                folder = ROOT / "data" / "media" / (m["chat_id"].replace("@", "_").replace(".", "_")) / d
+                if folder.is_dir():
+                    for cand in sorted(folder.glob("*")):
+                        if cand.suffix.lower() in (".ogg", ".opus", ".bin", ".mp3", ".m4a", ".wav") and str(cand) not in claimed:
+                            file = str(cand)
+                            break
+        if file:
+            if file in claimed:
+                continue
+            claimed.add(file)
+            m["file"] = file
             out.append(m)
     out.sort(key=lambda x: x.get("ts") or 0)
     return out
@@ -93,7 +136,8 @@ def domain_context(note: dict, con: sqlite3.Connection) -> str:
         "loop", "stenter", "jet", "safolina", "drum", "foil", "printing", "grey",
         "white", "taka", "thana", "bossio", "alpine", "ranjeli", "wely", "slub",
         "digital", "hybrid", "homer", "richo", "winch", "fuzing", "folding",
-        "Sunrise", "Kanhaiya", "Mishri", "Mahima", "Prafulbhai", "Shambhu", "Altaf",
+        "total", "till today", "Sunrise", "Kanhaiya", "Mishri", "Mahima",
+        "Prafulbhai", "Shambhu", "Altaf",
         "Rakesh master", "Sunil master", "Jafar bhai",
     ]
     try:
@@ -182,7 +226,7 @@ def _transcribe_best(model, file: str, prompt: str) -> tuple[str, str, list]:
     return " ".join(s.text.strip() for s in segs).strip(), lang, segs
 
 
-def transcribe_all(only_missing: bool = True) -> None:
+def transcribe_all(only_missing: bool = True, since_ts: int = 0) -> None:
     from faster_whisper import WhisperModel
 
     con = sqlite3.connect(DB)
@@ -197,7 +241,9 @@ def transcribe_all(only_missing: bool = True) -> None:
     model = None
     device = "cuda"
     notes = load_voice_notes()
-    print(f"{len(notes)} voice notes in lake")
+    if since_ts:
+        notes = [n for n in notes if (n.get("ts") or 0) >= since_ts]
+    print(f"{len(notes)} voice notes in lake" + (f" (since {since_ts})" if since_ts else ""))
     for note in notes:
         have = con.execute("SELECT 1 FROM transcripts WHERE message_id=?",
                            (note["message_id"],)).fetchone()
@@ -259,6 +305,7 @@ def transcripts_for_day(day: str, db: Path = DB) -> list[dict]:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--all", action="store_true", help="re-transcribe everything")
+    ap.add_argument("--since", default="", help="only notes on/after YYYY-MM-DD (IST)")
     ap.add_argument("--list", action="store_true", help="show stored transcripts")
     ap.add_argument("--emit", action="store_true", help="re-emit CSV only")
     args = ap.parse_args()
@@ -272,7 +319,11 @@ def main() -> None:
         for r in con.execute("SELECT ist, from_name, language, text FROM transcripts ORDER BY ts"):
             print(f"[{r['ist']}] {r['from_name']} ({r['language']}): {r['text']}")
     else:
-        transcribe_all(only_missing=not args.all)
+        since_ts = 0
+        if args.since:
+            since_ts = int(dt.datetime.strptime(args.since, "%Y-%m-%d").replace(
+                tzinfo=LOCAL_TZ).timestamp())
+        transcribe_all(only_missing=not args.all, since_ts=since_ts)
 
 
 if __name__ == "__main__":

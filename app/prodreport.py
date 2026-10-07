@@ -175,8 +175,13 @@ def load_reports(db: Path = DB) -> list[str]:
 
 def main() -> None:
     all_rows: list[Row] = []
+    seen_dates: set[str] = set()
     for text in load_reports():
-        all_rows.extend(parse_report(text)[1])
+        date, rows = parse_report(text)
+        if date in seen_dates:
+            continue
+        seen_dates.add(date)
+        all_rows.extend(rows)
     validate(all_rows)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with OUT.open("w", newline="", encoding="utf-8") as fh:

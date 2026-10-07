@@ -1,4 +1,4 @@
-import asyncio, time
+import asyncio, hashlib, json, time
 from app.store import Store
 
 def _extract_media(message: dict) -> tuple[str | None, str | None, str | None]:
@@ -13,6 +13,20 @@ def _extract_media(message: dict) -> tuple[str | None, str | None, str | None]:
         if isinstance(obj, dict) and (obj.get("link") or obj.get("id")):
             return obj.get("link"), obj.get("mime_type"), obj.get("id")
     return None, None, None
+
+
+def fingerprint(chat_id: str, message: dict) -> str:
+    """Provider-independent message fingerprint. The same WhatsApp message
+    re-delivered by different ingestion providers (whapi vs waha) carries
+    different provider ids — chat+ts+type+body hash catches the overlap."""
+    body = ""
+    for key in ("text", "image", "video", "audio", "voice", "document", "sticker"):
+        obj = message.get(key)
+        if isinstance(obj, dict):
+            slim = {k: str(v)[:80] for k, v in sorted(obj.items()) if k != "preview" and v}
+            body += json.dumps(slim, sort_keys=True, ensure_ascii=False)[:240]
+    raw = f"{chat_id}|{message.get('timestamp')}|{message.get('type')}|{body}"
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:24]
 
 class EventWorker:
     def __init__(self, store: Store, event_queue: asyncio.Queue, media_queue: asyncio.Queue, *,
@@ -52,7 +66,8 @@ class EventWorker:
                 continue
             if not mid:
                 continue
-            if self.store.is_seen(chat_id, mid):
+            fp = fingerprint(chat_id, message)
+            if self.store.is_seen(chat_id, mid) or self.store.is_fp_seen(fp):
                 self._bump("deduped")
                 continue
             ts = int(message.get("timestamp") or self.now())
@@ -60,6 +75,7 @@ class EventWorker:
             record = self.build_record(message, channel_id, event, source, int(self.now()))
             self.store.append_event(chat_id, ts, record)
             self.store.record_seen(chat_id, mid, ts, source)
+            self.store.record_fp(fp, chat_id, mid, ts)
             last_id, last_ts = self.store.get_last_seen(chat_id)
             if last_ts is None or ts >= last_ts:
                 self.store.set_last_seen(chat_id, mid, ts)

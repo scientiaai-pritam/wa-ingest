@@ -1,26 +1,55 @@
 targets:
   # groups / contacts below are NAMES or PHONES, resolved via the whapi API.
-  groups: []
+  groups: ["Gray program & white recive", "Direct digital  master group", "Swastik digital Loop report group", "Swastik digital washing report", "Swastik Digital Paper Print & Fusing","Sunrise swastik krisha", "Digital Hybrid design Group", "DIWAN B ___DEVELOPMENT", "Swastik Digital Pc Problems", "Swastik grey / white report", "Swastik digital production", "Swastik pc problems", "Swastik IT Material order", "Swastik AC maintenance and upkeep", "SWastik (IT) issue and reports", "Miss print /problem like dagi", "Swastik digital white & finish."]
   communities: []
   channels: []
   contacts: []
   # ids: raw chat IDs used directly — NO API resolution (0 requests).
   ids:
-    - "120363298579412558@g.us"   # Thora photos dedo 🤳🏻 (group)
-    - "918799507812"              # contact (matched in both forms)
-    - "919512843906"              # contact
+    - "120363427704545189@g.us"   # Swastik Digital
+    - "120363430269391388@g.us"   # Grey inward Swastik digital
+    - "120363410428955545@g.us"   # Swastik digital production
+    - "120363412544066919@g.us"   # Swastik digi pre processing (white) — NEW
+    - "120363373350099610@g.us"   # Swastik grey / white report (dispatch/packing)
+    - "120363409903031213@g.us"   # Swastik digital white & finish
+    - "120363427833719866@g.us"   # Miss print /problem like dagi
+    - "120363412940169494@g.us"   # Swastik pc problems
+    - "120363435178550008@g.us"   # Swastik Digital Pc Problems
+    - "120363430911077311@g.us"   # Swastik AC maintenance and upkeep
+    - "120363431408589948@g.us"   # Swastik IT Material order
+    - "120363027742217699@g.us"   # Swastik (IT) issue and reports
+    - "120363184191482756@g.us"   # DIWAN B DEVELOPMENT
+    - "120363411486701693@g.us"   # Sunrise swastik krisha
+    - "120363284178032488@g.us"   # Digital Hybrid design Group
+    - "120363236860121186@g.us"   # Swastik Digital Paper Print & Fusing — live m/c running/stop status (added 2026-09-16; name was in groups[] but never resolved under waha)
 
 ingestion:
+  provider: waha               # whapi | waha | openwa  (webhook goes to /webhook/<provider>)
   capture_events: ["post", "put", "delete", "status"]
   include_outgoing: true
 
+# Per-provider settings (only the active provider's section is used).
+# Backfill (history pull) is a whapi capability; waha/openwa are live-only.
+providers:
+  whapi: {}
+  waha:
+    base_url: "http://localhost:3000"
+    session: "default"
+    api_key: "fixed-waha-key-2026"
+  openwa:
+    base_url: "http://localhost:8080"
+    session: "default"
+    api_key: ""
+
 backfill:
-  enabled: false              # set true to enable history catch-up (uses API quota)
-  interval_seconds: 7200
+  enabled: true               # history catch-up (uses API quota)
+  interval_seconds: 72000
   per_chat_page_size: 100
   initial_history_pages: 5
+  window_hours: 72            # only backfill history from the last 24h
 
 media:
   max_concurrent_downloads: 3
   download_jitter_ms: [100, 500]
   retry_attempts: 3
+

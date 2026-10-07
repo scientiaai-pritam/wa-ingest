@@ -19,6 +19,10 @@ class Store:
             PRIMARY KEY(chat_id, message_id))""")
         self._db.execute("""CREATE TABLE IF NOT EXISTS chat_progress (
             chat_id TEXT PRIMARY KEY, last_seen_id TEXT, last_seen_ts INTEGER)""")
+        # provider-independent fingerprint (chat+ts+type+body-hash): collapses
+        # the same WhatsApp message re-delivered by different ingestion providers
+        self._db.execute("""CREATE TABLE IF NOT EXISTS seen_fingerprints (
+            fp TEXT PRIMARY KEY, chat_id TEXT, message_id TEXT, ts INTEGER)""")
         self._db.commit()
 
     @staticmethod
@@ -43,6 +47,18 @@ class Store:
                 "SELECT 1 FROM seen_messages WHERE chat_id=? AND message_id=?",
                 (chat_id, message_id))
             return cur.fetchone() is not None
+
+    def is_fp_seen(self, fp: str) -> bool:
+        with self._lock:
+            return self._db.execute(
+                "SELECT 1 FROM seen_fingerprints WHERE fp=?", (fp,)).fetchone() is not None
+
+    def record_fp(self, fp: str, chat_id: str, message_id: str, ts: int) -> None:
+        with self._lock:
+            self._db.execute(
+                "INSERT OR IGNORE INTO seen_fingerprints(fp,chat_id,message_id,ts) VALUES(?,?,?,?)",
+                (fp, chat_id, message_id, ts))
+            self._db.commit()
 
     def record_seen(self, chat_id: str, message_id: str, ts: int, source: str) -> None:
         with self._lock:

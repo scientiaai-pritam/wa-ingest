@@ -89,6 +89,14 @@ class WhapiClient:
         resp.raise_for_status()
         return resp.content
 
+    async def fetch_bytes(self, url: str, headers: dict | None = None) -> bytes:
+        """Provider-agnostic GET for one media file (URL + headers come from
+        the active ingestion provider). Shares throttle + media timeout."""
+        await self._throttle()
+        resp = await self._client.get(url, headers=headers or {}, timeout=self._MEDIA_TIMEOUT)
+        resp.raise_for_status()
+        return resp.content
+
     async def update_settings(self, settings: dict) -> dict:
         resp = await self._request("PATCH", f"{self.base_url}/settings", json=settings)
         resp.raise_for_status()

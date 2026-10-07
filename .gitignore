@@ -1,7 +1,48 @@
+# python
 __pycache__/
-.pytest_cache/
-.env
-data/
 *.pyc
+.pytest_cache/
 venv/
 .venv/
+
+# data + generated outputs (rebuildable via scripts)
+data/
+dashboard/
+reports/
+logs/
+
+# local junk / caches
+.env
+.deps/
+.playwright-mcp/
+.claude/
+Temp/
+temp_check.py
+data.zip
+wget-log
+"="
+
+# session one-off / scratch scripts
+/tmp_*
+/scripts/tmp_*
+/scripts/_tmp_*
+/scripts/_backfill_*
+/scripts/_night_*
+/scripts/_chunk_*
+/scripts/add_*
+/scripts/fix_*
+/scripts/append_*
+/scripts/insert_*
+/scripts/mark_*
+/scripts/remove_*
+/scripts/peek_*
+/scripts/diag*.py
+/scripts/repair_*
+/scripts/complete_*
+/scripts/restore_*
+/scripts/build_corrections2.py
+/scripts/build_corrections3.py
+/scripts/todo_paths.txt
+/scripts/group_icons/candidates/
+/scripts/group_icons/out/
+/scripts/group_icons/montage.png

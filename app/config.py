@@ -15,6 +15,8 @@ class Targets:
 class IngestionCfg:
     capture_events: list[str] = field(default_factory=lambda: ["post", "put", "delete", "status"])
     include_outgoing: bool = True
+    provider: str = "whapi"          # whapi | waha | openwa
+    providers_cfg: dict = field(default_factory=dict)  # per-provider settings from yaml
 
 @dataclass
 class BackfillCfg:
@@ -51,8 +53,10 @@ def load_config(env_path: str = ".env", config_path: str = "config.yaml") -> App
     i = raw.get("ingestion", {}) or {}
     b = raw.get("backfill", {}) or {}
     m = raw.get("media", {}) or {}
+    p = raw.get("providers", {}) or {}
     env = dotenv_values(env_path)
-    required = ["WHAPI_TOKEN", "WEBHOOK_URL"]
+    provider = (i.get("provider") or "whapi").lower()
+    required = ["WEBHOOK_URL"] + (["WHAPI_TOKEN"] if provider == "whapi" else [])
     missing = [k for k in required if not env.get(k)]
     if missing:
         raise RuntimeError(f"Missing env keys in {env_path}: {missing}")
@@ -65,6 +69,8 @@ def load_config(env_path: str = ".env", config_path: str = "config.yaml") -> App
         ingestion=IngestionCfg(
             capture_events=i.get("capture_events") or ["post","put","delete","status"],
             include_outgoing=i.get("include_outgoing", True),
+            provider=provider,
+            providers_cfg=p,
         ),
         backfill=BackfillCfg(
             enabled=b.get("enabled", True),
@@ -79,7 +85,7 @@ def load_config(env_path: str = ".env", config_path: str = "config.yaml") -> App
             retry_attempts=m.get("retry_attempts") or 3,
         ),
         env=EnvCfg(
-            whapi_token=env["WHAPI_TOKEN"],
+            whapi_token=env.get("WHAPI_TOKEN") or "",
             webhook_url=env["WEBHOOK_URL"],
             webhook_secret=env.get("WEBHOOK_SECRET") or None,
             whapi_base_url=env.get("WHAPI_BASE_URL", "https://gate.whapi.cloud"),
